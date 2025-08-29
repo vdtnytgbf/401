@@ -1,0 +1,52 @@
+name: HTTPX Workflow 413
+
+on: push
+
+jobs:
+  run-custom-httpx:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3600  # Max 60 hours
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget unzip
+
+      - name: Install HTTPX
+        run: |
+          wget https://github.com/projectdiscovery/httpx/releases/download/v1.6.6/httpx_1.6.6_linux_amd64.zip
+          unzip -o httpx_1.6.6_linux_amd64.zip
+          chmod +x httpx
+          sudo mv httpx /usr/local/bin/
+
+      - name: Split sub_413.txt into chunks
+        run: |
+          mkdir split
+          split -l 10000 sub/sub_413.txt split/x
+          echo "Splitted sub_413.txt into $(ls split | wc -l) files"
+
+      - name: Run HTTPX on all chunks
+        run: |
+          mkdir output
+          for file in split/*; do
+            echo "Running httpx on $file"
+            httpx -l "$file" -mc 200,301,302,307,401,403,405,500,204,415 -sc -server -title -silent -o "output/$(basename $file).httpx"
+          done
+
+      - name: Combine and deduplicate results
+        run: |
+          cat output/*.httpx | sort -u > httpx_413.txt
+          echo "Total unique results:"
+          wc -l httpx_413.txt
+
+      - name: Upload Output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: httpx-final-413
+          path: httpx_413.txt
+
